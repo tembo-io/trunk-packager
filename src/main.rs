@@ -1,8 +1,10 @@
 mod client;
 mod unarchiver;
 
-use std::fs::File;
+use std::{fs::File, sync::Arc, io::{ self}};
+use std::io::Write;
 
+use anyhow::Context;
 use memmap::MmapOptions;
 use owo_colors::OwoColorize;
 
@@ -10,47 +12,74 @@ use crate::{client::Client, unarchiver::Unarchiver};
 
 pub type Result<T = ()> = anyhow::Result<T>;
 
+async fn print_shared_libraries(client: Client, extension_name: Arc<str>) -> Result {
+    // Get the archive for this extension
+    let archive_file = client.fetch_extension_archive(&extension_name).await?;
+    
+    let shared_objects = Unarchiver::extract_shared_objs(&archive_file).await?;
+
+    for object in shared_objects {
+        let file = File::open(&object)?;
+        let map = unsafe { MmapOptions::new().map(&file) }?;
+
+        let obj = goblin::Object::parse(&map)?;
+        let shared_libraries = match obj {
+            goblin::Object::Elf(elf) => elf.libraries,
+            other => {
+                eprintln!("{} has an unsupported object format: {:?}", extension_name, other);
+                continue;
+            }
+        };
+
+        let mut stdout = io::stdout().lock();
+
+        writeln!(stdout, "- Libraries for {}", extension_name.green())?;
+        for library in shared_libraries {
+            writeln!(stdout, "\t* - {library}")?;
+        }
+    }
+
+    Ok(())
+}
+
 #[tokio::main]
 async fn main() -> Result {
     let client = Client::new();
     std::env::set_current_dir(client.temp_dir())?;
 
-    let exts = client.fetch_extensions().await?;
+    let extensions = client.fetch_extensions().await?;
+    let mut handles = Vec::with_capacity(extensions.len());
+
     println!(
         "[{}] Loaded {} extensions.",
         "yay!".green(),
-        exts.len().blue()
+        extensions.len().blue()
     );
 
-    for ext in exts {
-        // Get the archive for this extension
-        let archive_file = client.fetch_extension_archive(&ext).await?;
+    for extension in extensions {
+        let extension: Arc<str> = Arc::from(extension.name);
 
-        let Ok(shared_objects) = Unarchiver::extract_shared_objs(&archive_file).await else {
-            continue;
+        let my_client = client.clone();
+        let my_extension = extension.clone();
+
+        let work = async move {
+            print_shared_libraries(my_client, my_extension.clone()).await.with_context(|| my_extension)
         };
 
-        for object in shared_objects {
-            let file = File::open(&object)?;
-            let map = unsafe { MmapOptions::new().map(&file) }?;
+        handles.push(tokio::spawn(work));
+    }
 
-            let obj = goblin::Object::parse(&map)?;
-            let shared_libraries = match obj {
-                goblin::Object::Elf(elf) => elf.libraries,
-                other => {
-                    eprintln!("{} has an unsupported object format: {:?}", ext.name, other);
-                    continue;
-                }
-            };
+    let mut failing_extensions = Vec::with_capacity(24);
 
-            println!("- Libraries for {}", ext.name.green());
-            for library in shared_libraries {
-                println!("\t* - {library}");
-            }
+    for handle in handles {
+        if let Err(failing_extension) = handle.await? {
+            failing_extensions.push(failing_extension);
         }
     }
 
-    std::mem::forget(client);
+    for failing_extension in failing_extensions {
+        println!("Failed on {failing_extension}");
+    }
 
     Ok(())
 }

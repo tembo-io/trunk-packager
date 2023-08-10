@@ -33,7 +33,9 @@ impl Unarchiver {
                 .map(ToOwned::to_owned)
                 .collect())
         } else {
-            anyhow::bail!("Failed to decompress archive");
+            let utf8_output = String::from_utf8(output.stderr)?;
+
+            anyhow::bail!("Failed to decompress archive: {utf8_output}");
         }
     }
 }

@@ -4,6 +4,7 @@ use std::{
     fs::File,
     io,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use once_cell::sync::Lazy;
@@ -12,16 +13,16 @@ use tempfile::TempDir;
 
 static BASE_URL: Lazy<String> = Lazy::new(|| std::env::var("BASE_URL").unwrap());
 
+#[derive(Clone)]
 pub struct Client {
     client: reqwest::Client,
-    dir: TempDir,
+    dir: Arc<TempDir>,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Extension {
     pub name: String,
-    pub latest_version: String,
 }
 
 impl Client {
@@ -29,7 +30,7 @@ impl Client {
         let dir = tempfile::tempdir().expect("Failed to build temporary directory");
         Self {
             client: reqwest::Client::new(),
-            dir,
+            dir: Arc::new(dir),
         }
     }
 
@@ -69,11 +70,11 @@ impl Client {
         Ok(destination)
     }
 
-    pub async fn fetch_extension_archive(&self, extension: &Extension) -> Result<PathBuf> {
+    pub async fn fetch_extension_archive(&self, extension: &str) -> Result<PathBuf> {
         let archive_url = {
             let url = format!(
-                "{}/extensions/{}/{}/download",
-                &*BASE_URL, extension.name, extension.latest_version
+                "{}/extensions/{}/latest/download",
+                &*BASE_URL, extension,
             );
 
             self.client.get(url).send().await?.text().await?
