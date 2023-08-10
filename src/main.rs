@@ -33,7 +33,7 @@ async fn print_shared_libraries(client: Client, extension_name: Arc<str>) -> Res
 
         let mut stdout = io::stdout().lock();
 
-        writeln!(stdout, "- Libraries for {}", extension_name.green())?;
+        writeln!(stdout, "- Libraries for {} ({})", extension_name.green(), object)?;
         for library in shared_libraries {
             writeln!(stdout, "\t* - {library}")?;
         }
