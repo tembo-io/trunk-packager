@@ -1,44 +1,37 @@
 mod client;
+mod dependencies;
 mod shared_lib_registry;
 mod unarchiver;
 
 use std::io::Write;
+use std::ops::Not;
 use std::{
     fs::File,
     io::{self},
     sync::Arc,
 };
 
+pub use shared_lib_registry::SharedLibraryRegistry;
 use anyhow::{Context, Ok};
 use memmap::MmapOptions;
 use owo_colors::OwoColorize;
-use shared_lib_registry::SharedLibraryRegistry;
 
+use crate::dependencies::Dependencies;
 use crate::{client::Client, unarchiver::Unarchiver};
 
 pub type Result<T = ()> = anyhow::Result<T>;
 
-async fn fetch_and_print_dependencies(
-    client: Client,
-    extension_name: Arc<str>,
-    registry: SharedLibraryRegistry,
-) -> Result {
+async fn fetch_and_print_dependencies(client: Client, extension_name: Arc<str>) -> Result {
     fn print_to_stdout(
         extension_name: &str,
-        specific_object: &str,
-        shared_libraries: &[&str],
+        dependencies: &Dependencies
     ) -> Result {
         let mut stdout = io::stdout().lock();
 
         writeln!(
             stdout,
-            "- Libraries for {} ({})",
-            extension_name.green(),
-            specific_object
+            "- Libraries for {extension_name}:\n{dependencies}",
         )?;
-        for library in shared_libraries {
-            writeln!(stdout, "\t* - {library}")?;
-        }
         stdout.flush()?;
 
         Ok(())
@@ -46,8 +39,13 @@ async fn fetch_and_print_dependencies(
 
     // Get the archive for this extension
     let archive_file = client.fetch_extension_archive(&extension_name).await?;
+    let mut dependencies = Dependencies::new();
 
-    let shared_objects = Unarchiver::extract_shared_objs(&archive_file).await?;
+    // The output from the `tar` binary after it decompressed `.so` files from the archive
+    let decompression_stdout = Unarchiver::extract_shared_objs(&archive_file).await?;
+    let shared_objects = decompression_stdout
+        .split('\n')
+        .filter(|file| file.is_empty().not());
 
     for object in shared_objects {
         let file = File::open(&object)?;
@@ -65,10 +63,12 @@ async fn fetch_and_print_dependencies(
             }
         };
 
-        print_to_stdout(&*extension_name, &object, &shared_libraries)?;
-
-        registry.extend(&shared_libraries);
+        for library in &shared_libraries {
+            dependencies.add(library);
+        }
     }
+
+    print_to_stdout(&*extension_name, &dependencies)?;
 
     Ok(())
 }
@@ -76,7 +76,6 @@ async fn fetch_and_print_dependencies(
 #[tokio::main]
 async fn main() -> Result {
     let client = Client::new();
-    let registry = SharedLibraryRegistry::new();
 
     let previous_dir = std::env::current_dir()?;
     std::env::set_current_dir(client.temp_dir())?;
@@ -96,10 +95,9 @@ async fn main() -> Result {
         // Copies for the Tokio Task
         let my_client = client.clone();
         let my_extension = extension.clone();
-        let my_registry = registry.clone();
 
         let work = async move {
-            fetch_and_print_dependencies(my_client, my_extension.clone(), my_registry)
+            fetch_and_print_dependencies(my_client, my_extension.clone())
                 .await
                 .with_context(|| my_extension)
         };
@@ -120,7 +118,6 @@ async fn main() -> Result {
     }
 
     std::env::set_current_dir(previous_dir)?;
-    registry.export("./libraries-found")?;
 
     Ok(())
 }
