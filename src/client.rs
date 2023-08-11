@@ -72,10 +72,7 @@ impl Client {
 
     pub async fn fetch_extension_archive(&self, extension: &str) -> Result<PathBuf> {
         let archive_url = {
-            let url = format!(
-                "{}/extensions/{}/latest/download",
-                &*BASE_URL, extension,
-            );
+            let url = format!("{}/extensions/{}/latest/download", &*BASE_URL, extension,);
 
             self.client.get(url).send().await?.text().await?
         };
