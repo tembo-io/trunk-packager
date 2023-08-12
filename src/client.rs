@@ -1,4 +1,4 @@
-use crate::Result;
+use crate::{Result, BASE_URL};
 
 use std::{
     fs::File,
@@ -7,11 +7,8 @@ use std::{
     sync::Arc,
 };
 
-use once_cell::sync::Lazy;
 use serde::Deserialize;
 use tempfile::TempDir;
-
-static BASE_URL: Lazy<String> = Lazy::new(|| std::env::var("BASE_URL").unwrap());
 
 #[derive(Clone)]
 pub struct Client {
@@ -23,6 +20,9 @@ pub struct Client {
 #[serde(rename_all = "camelCase")]
 pub struct Extension {
     pub name: String,
+    pub license: String,
+    pub latest_version: String,
+    pub description: String,
 }
 
 impl Client {

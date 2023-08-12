@@ -1,11 +1,17 @@
 use std::{
     collections::{HashMap, HashSet},
     fmt::Display,
+    fs::File,
+    ops::Not,
     sync::Arc,
 };
 
+use memmap::MmapOptions;
 use owo_colors::OwoColorize;
 use phf::{phf_map, phf_set, Map};
+
+use crate::client::{Client, Extension};
+use crate::{unarchiver::Unarchiver, Result};
 
 static BASIC_SHARED_LIBS: phf::Set<&'static str> = phf_set! {
     "libc.so.6",
@@ -56,6 +62,19 @@ pub enum DependencySupplier {
     Unknown,
 }
 
+impl DependencySupplier {
+    pub fn is_met(&self) -> bool {
+        matches!(self, Self::MetBy { package: _ })
+    }
+
+    pub fn name(&self) -> &str {
+        match self {
+            DependencySupplier::MetBy { package } => package,
+            DependencySupplier::Unknown => "<unknown>",
+        }
+    }
+}
+
 impl Display for DependencySupplier {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -66,8 +85,8 @@ impl Display for DependencySupplier {
 }
 
 pub struct Dependencies {
-    shared_libraries: HashSet<Arc<str>>,
-    suppliers: HashMap<Arc<str>, DependencySupplier>,
+    pub shared_libraries: HashSet<Arc<str>>,
+    pub suppliers: HashMap<Arc<str>, DependencySupplier>,
 }
 
 impl Display for Dependencies {
@@ -82,6 +101,43 @@ impl Display for Dependencies {
 }
 
 impl Dependencies {
+    /// Fetch an extension's dependencies by analyzing its compiled archive
+    pub async fn fetch_from_archive(extension: Extension, client: Client) -> Result<(Extension, Self)> {
+        let mut dependencies = Self::new();
+
+        // Get the archive for this extension
+        let archive_file = client.fetch_extension_archive(&extension.name).await?;
+
+        // The output from the `tar` binary after it decompressed `.so` files from the archive
+        let decompression_stdout = Unarchiver::extract_shared_objs(&archive_file).await?;
+        let shared_objects = decompression_stdout
+            .split('\n')
+            .filter(|file| file.is_empty().not());
+
+        for object in shared_objects {
+            let file = File::open(&object)?;
+            let map = unsafe { MmapOptions::new().map(&file) }?;
+
+            let obj = goblin::Object::parse(&map)?;
+            let shared_libraries = match obj {
+                goblin::Object::Elf(elf) => elf.libraries,
+                other => {
+                    eprintln!(
+                        "{} has an unsupported object format: {:?}",
+                        extension.name, other
+                    );
+                    continue;
+                }
+            };
+
+            for library in &shared_libraries {
+                dependencies.add(library);
+            }
+        }
+
+        Ok((extension, dependencies))
+    }
+
     pub fn new() -> Self {
         Self {
             shared_libraries: HashSet::with_capacity(8),
