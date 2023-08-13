@@ -3,6 +3,7 @@ use std::{
     fmt::Display,
     fs::File,
     ops::Not,
+    path::PathBuf,
     sync::Arc,
 };
 
@@ -100,18 +101,23 @@ impl Display for Dependencies {
     }
 }
 
+pub struct FetchData {
+    /// Actual extension data
+    pub extension: Extension,
+    /// The system dependencies of this file
+    pub dependencies: Dependencies,
+    /// The location of the .tar.gz archive downloaded from Trunk
+    pub archive_file: PathBuf,
+}
+
 impl Dependencies {
     /// Fetch an extension's dependencies by analyzing its compiled archive
-    pub async fn fetch_from_archive(
-        extension: Extension,
-        client: Client,
-    ) -> Result<(Extension, Self)> {
+    pub async fn fetch_from_archive(extension: Extension, client: Client) -> Result<FetchData> {
         let mut dependencies = Self::new();
         let temp_dir = client.temp_dir();
 
         // Get the archive for this extension
         let archive_file = client.fetch_extension_archive(&extension.name).await?;
-        eprintln!("Saved to {}", archive_file.display());
 
         // The output from the `tar` binary after it decompressed `.so` files from the archive
         let decompression_stdout = Unarchiver::extract_shared_objs(&archive_file, temp_dir).await?;
@@ -121,7 +127,7 @@ impl Dependencies {
 
         for object in shared_objects {
             let object = temp_dir.join(object);
-            let file = File::open(&object)?;
+            let file = File::open(object)?;
             let map = unsafe { MmapOptions::new().map(&file) }?;
 
             let obj = goblin::Object::parse(&map)?;
@@ -141,7 +147,11 @@ impl Dependencies {
             }
         }
 
-        Ok((extension, dependencies))
+        Ok(FetchData {
+            extension,
+            dependencies,
+            archive_file,
+        })
     }
 
     pub fn new() -> Self {

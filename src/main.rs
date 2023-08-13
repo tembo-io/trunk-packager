@@ -4,15 +4,14 @@ mod dependencies;
 mod shared_lib_registry;
 mod unarchiver;
 
-use std::io::Write;
-use std::io::{self};
-use std::path::PathBuf;
+use std::ops::Not;
+use std::path::{Path, PathBuf};
 
 use anyhow::Ok;
 use once_cell::sync::Lazy;
 use owo_colors::OwoColorize;
 pub use shared_lib_registry::SharedLibraryRegistry;
-use tempfile::{tempdir, TempDir};
+use tempfile::TempDir;
 
 use crate::client::Client;
 use crate::deb_packager::DebPackager;
@@ -22,19 +21,18 @@ pub type Result<T = ()> = anyhow::Result<T>;
 
 pub static BASE_URL: Lazy<String> = Lazy::new(|| std::env::var("BASE_URL").unwrap());
 pub static EXPORT_DIR: Lazy<PathBuf> = Lazy::new(|| std::env::var_os("EXPORT_DIR").unwrap().into());
+pub static TEMP_DIR: Lazy<TempDir> = Lazy::new(|| tempfile::tempdir().unwrap());
 
-fn print_to_stdout(extension_name: &str, dependencies: &Dependencies) -> Result {
-    let mut stdout = io::stdout().lock();
-
-    writeln!(stdout, "- Libraries for {extension_name}:\n{dependencies}",)?;
-    stdout.flush()?;
-
-    Ok(())
+pub fn split_newlines(text: &str) -> impl Iterator<Item = &'_ Path> {
+    text.split('\n')
+        .filter(|line| line.is_empty().not())
+        .map(Path::new)
 }
 
 #[tokio::main]
 async fn main() -> Result {
     let client = Client::new();
+    std::env::set_current_dir(&*TEMP_DIR)?;
 
     let extensions = client.fetch_extensions().await?;
     let mut handles = Vec::with_capacity(extensions.len());
@@ -50,10 +48,9 @@ async fn main() -> Result {
         let my_client = client.clone();
 
         let work = async move {
-            let (extension, dependencies) =
-                Dependencies::fetch_from_archive(extension, my_client).await?;
+            let data_fetched = Dependencies::fetch_from_archive(extension, my_client).await?;
 
-            let archive_written = DebPackager::build_deb(extension, dependencies)?;
+            let archive_written = DebPackager::build_deb(data_fetched).await?;
             println!("Wrote archive at {}", archive_written.display());
 
             Ok(())
