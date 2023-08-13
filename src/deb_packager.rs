@@ -1,8 +1,5 @@
-use std::ops::Not;
 use std::path::Path;
 use std::{fs::File, io::Write, path::PathBuf};
-
-use tempfile::tempdir;
 
 use crate::dependencies::DependencySupplier;
 use crate::Result;
@@ -27,7 +24,7 @@ impl DebPackager {
                 write!(file, ", ")?;
             }
         }
-        
+
         writeln!(file)?;
 
         Ok(())
@@ -42,7 +39,10 @@ impl DebPackager {
         dir: &Path,
     ) -> Result<()> {
         let mut file = {
-            let path = dir.join(format!("{}-{}.control", extension.name, extension.latest_version));
+            let path = dir.join(format!(
+                "{}-{}.control",
+                extension.name, extension.latest_version
+            ));
 
             File::create(path)?
         };
@@ -68,7 +68,7 @@ impl DebPackager {
             .all(DependencySupplier::is_met);
         anyhow::ensure!(
             all_dependencies_are_known,
-            "The supplied for some/all dependencies of {} are unknown",
+            "The packages that supply the dependencies of {} are unknown",
             extension.name
         );
 

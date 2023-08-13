@@ -102,11 +102,15 @@ impl Display for Dependencies {
 
 impl Dependencies {
     /// Fetch an extension's dependencies by analyzing its compiled archive
-    pub async fn fetch_from_archive(extension: Extension, client: Client) -> Result<(Extension, Self)> {
+    pub async fn fetch_from_archive(
+        extension: Extension,
+        client: Client,
+    ) -> Result<(Extension, Self)> {
         let mut dependencies = Self::new();
 
         // Get the archive for this extension
         let archive_file = client.fetch_extension_archive(&extension.name).await?;
+        eprintln!("Saved to {}", archive_file.display());
 
         // The output from the `tar` binary after it decompressed `.so` files from the archive
         let decompression_stdout = Unarchiver::extract_shared_objs(&archive_file).await?;

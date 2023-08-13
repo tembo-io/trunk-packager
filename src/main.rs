@@ -5,24 +5,18 @@ mod shared_lib_registry;
 mod unarchiver;
 
 use std::io::Write;
-use std::ops::Not;
+use std::io::{self};
 use std::path::PathBuf;
-use std::{
-    fs::File,
-    io::{self},
-    sync::Arc,
-};
 
-use anyhow::{Context, Ok};
-use client::Extension;
-use memmap::MmapOptions;
+use anyhow::Ok;
 use once_cell::sync::Lazy;
 use owo_colors::OwoColorize;
 pub use shared_lib_registry::SharedLibraryRegistry;
+use tempfile::{tempdir, TempDir};
 
+use crate::client::Client;
 use crate::deb_packager::DebPackager;
 use crate::dependencies::Dependencies;
-use crate::{client::Client, unarchiver::Unarchiver};
 
 pub type Result<T = ()> = anyhow::Result<T>;
 
@@ -42,9 +36,6 @@ fn print_to_stdout(extension_name: &str, dependencies: &Dependencies) -> Result 
 async fn main() -> Result {
     let client = Client::new();
 
-    let previous_dir = std::env::current_dir()?;
-    std::env::set_current_dir(client.temp_dir())?;
-
     let extensions = client.fetch_extensions().await?;
     let mut handles = Vec::with_capacity(extensions.len());
 
@@ -55,16 +46,12 @@ async fn main() -> Result {
     );
 
     for extension in extensions {
-
         // Copies for the Tokio Task
         let my_client = client.clone();
 
         let work = async move {
-            // fetch_and_print_dependencies(my_client, my_extension.clone())
-            //     .await
-            //     .with_context(|| my_extension)
-
-            let (extension, dependencies) = Dependencies::fetch_from_archive(extension, my_client).await?;
+            let (extension, dependencies) =
+                Dependencies::fetch_from_archive(extension, my_client).await?;
 
             let archive_written = DebPackager::build_deb(extension, dependencies)?;
             println!("Wrote archive at {}", archive_written.display());
@@ -84,10 +71,8 @@ async fn main() -> Result {
     }
 
     for failing_extension in failing_extensions {
-        println!("Failed on {failing_extension}");
+        eprintln!("Err: {failing_extension}");
     }
-
-    std::env::set_current_dir(previous_dir)?;
 
     Ok(())
 }

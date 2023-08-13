@@ -1,11 +1,6 @@
 use crate::{Result, BASE_URL};
 
-use std::{
-    fs::File,
-    io,
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::{fs::File, io, path::PathBuf, sync::Arc};
 
 use serde::Deserialize;
 use tempfile::TempDir;
@@ -32,10 +27,6 @@ impl Client {
             client: reqwest::Client::new(),
             dir: Arc::new(dir),
         }
-    }
-
-    pub fn temp_dir(&self) -> &Path {
-        self.dir.path()
     }
 
     /// Get the name of all currently available extensions
