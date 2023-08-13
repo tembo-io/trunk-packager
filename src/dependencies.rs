@@ -107,18 +107,20 @@ impl Dependencies {
         client: Client,
     ) -> Result<(Extension, Self)> {
         let mut dependencies = Self::new();
+        let temp_dir = client.temp_dir();
 
         // Get the archive for this extension
         let archive_file = client.fetch_extension_archive(&extension.name).await?;
         eprintln!("Saved to {}", archive_file.display());
 
         // The output from the `tar` binary after it decompressed `.so` files from the archive
-        let decompression_stdout = Unarchiver::extract_shared_objs(&archive_file).await?;
+        let decompression_stdout = Unarchiver::extract_shared_objs(&archive_file, temp_dir).await?;
         let shared_objects = decompression_stdout
             .split('\n')
             .filter(|file| file.is_empty().not());
 
         for object in shared_objects {
+            let object = temp_dir.join(object);
             let file = File::open(&object)?;
             let map = unsafe { MmapOptions::new().map(&file) }?;
 

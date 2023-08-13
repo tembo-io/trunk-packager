@@ -26,15 +26,18 @@ impl Unarchiver {
         Ok(())
     }
 
-    pub async fn extract_shared_objs(path: &Path) -> Result<String> {
+    pub async fn extract_shared_objs(path: &Path, save_to: &Path) -> Result<String> {
         let file_name = path
             .to_str()
             // TODO: we don't strictly need to be UTF-8 here
             .with_context(|| "Expected file name to be valid UTF-8")?;
+        let export_to = save_to
+            .to_str()
+            .with_context(|| "Expected file name to be valid UTF-8")?;
 
         Self::ensure_has_shared_objects(file_name).await?;
 
-        let arguments = ["-xzvf", file_name, "--wildcards", "*.so"];
+        let arguments = ["-xzvf", file_name, "-C", export_to, "--wildcards", "*.so"];
 
         // Take from the archive only .so files
         let output = Command::new("tar")
