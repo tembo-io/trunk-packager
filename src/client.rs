@@ -1,4 +1,4 @@
-use crate::{Result, BASE_URL};
+use crate::Result;
 
 use std::{
     fs::File,
@@ -13,6 +13,7 @@ use tempfile::TempDir;
 #[derive(Clone)]
 pub struct Client {
     client: reqwest::Client,
+    base_url: String,
     dir: Arc<TempDir>,
 }
 
@@ -26,10 +27,11 @@ pub struct Extension {
 }
 
 impl Client {
-    pub fn new() -> Self {
+    pub fn new(base_url: String) -> Self {
         let dir = tempfile::tempdir().expect("Failed to build temporary directory");
         Self {
             client: reqwest::Client::new(),
+            base_url,
             dir: Arc::new(dir),
         }
     }
@@ -40,7 +42,7 @@ impl Client {
 
     /// Get the name of all currently available extensions
     pub async fn fetch_extensions(&self) -> Result<Vec<Extension>> {
-        let url = format!("{}/extensions/all", &*BASE_URL);
+        let url = format!("{}/extensions/all", self.base_url);
 
         self.client
             .get(url)
@@ -72,7 +74,7 @@ impl Client {
 
     pub async fn fetch_extension_archive(&self, extension: &str) -> Result<PathBuf> {
         let archive_url = {
-            let url = format!("{}/extensions/{}/latest/download", &*BASE_URL, extension,);
+            let url = format!("{}/extensions/{}/latest/download", self.base_url, extension,);
 
             self.client.get(url).send().await?.text().await?
         };

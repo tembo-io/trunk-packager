@@ -1,6 +1,7 @@
 use std::ffi::OsStr;
 use std::os::unix::prelude::OsStrExt;
 use std::path::Path;
+use std::sync::Arc;
 use std::{io::Write, path::PathBuf};
 
 use flate2::Compression;
@@ -8,7 +9,7 @@ use fs_err::File;
 
 use crate::dependencies::{DependencySupplier, FetchData};
 use crate::unarchiver::Unarchiver;
-use crate::{client::Extension, dependencies::Dependencies, EXPORT_DIR};
+use crate::{client::Extension, dependencies::Dependencies};
 use crate::{split_newlines, utils, Result, TEMP_DIR};
 
 pub struct DebPackage {
@@ -52,7 +53,7 @@ impl DebPackager {
 
         Ok(compressed_bytes)
     }
-    
+
     fn gzip_path(path: &Path) -> Result<Vec<u8>> {
         let uncompressed_bytes = utils::read_to_vec(path)?;
 
@@ -128,6 +129,7 @@ impl DebPackager {
             dependencies,
             archive_file,
         }: FetchData,
+        export_dir: Arc<Path>,
     ) -> Result<PathBuf> {
         // Check if this .deb is actually writable (e.g. if we know all dependencies it requires)
         let all_dependencies_are_known = dependencies
@@ -140,7 +142,7 @@ impl DebPackager {
             extension.name
         );
 
-        let archive_path = EXPORT_DIR.join(format!("{}.deb", extension.name));
+        let archive_path = export_dir.join(format!("{}.deb", extension.name));
         let mut deb_archive = DebPackage::new(&archive_path)?;
         deb_archive.add_file("debian-binary", b"2.0\n")?;
 
