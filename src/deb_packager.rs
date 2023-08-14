@@ -149,6 +149,7 @@ impl DebPackager {
 
         let archive_path = EXPORT_DIR.join(format!("{}.deb", extension.name));
         let mut deb_archive = DebPackage::new(&archive_path)?;
+        deb_archive.add_file("debian-binary", b"2.0\n")?;
 
         // Save the `control` file to our temp directory
         let tar_gzipped = DebPackager::write_control_file(&extension, &dependencies)?;
