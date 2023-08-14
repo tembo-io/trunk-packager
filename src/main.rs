@@ -1,7 +1,6 @@
 mod client;
 mod deb_packager;
 mod dependencies;
-mod shared_lib_registry;
 mod unarchiver;
 
 use std::ops::Not;
@@ -10,7 +9,6 @@ use std::path::{Path, PathBuf};
 use anyhow::Ok;
 use once_cell::sync::Lazy;
 use owo_colors::OwoColorize;
-pub use shared_lib_registry::SharedLibraryRegistry;
 use tempfile::TempDir;
 
 use crate::client::Client;
