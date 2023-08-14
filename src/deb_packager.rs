@@ -1,18 +1,82 @@
 use std::ffi::OsStr;
+use std::io::{BufReader, Read};
 use std::os::unix::prelude::OsStrExt;
 use std::path::Path;
 use std::{io::Write, path::PathBuf};
 
+use flate2::Compression;
 use fs_err::{self as fs, File};
+use tempfile::tempfile;
 
 use crate::dependencies::{DependencySupplier, FetchData};
 use crate::unarchiver::Unarchiver;
 use crate::{client::Extension, dependencies::Dependencies, EXPORT_DIR};
 use crate::{split_newlines, Result, TEMP_DIR};
 
+pub struct DebPackage {
+    builder: ar::Builder<File>,
+}
+
+impl DebPackage {
+    pub fn new(path: &Path) -> Result<Self> {
+        let file = File::create(path)?;
+        let builder = ar::Builder::new(file);
+
+        Ok(Self {
+            builder
+        })
+    }
+
+    pub fn add_file(&mut self, path: impl AsRef<[u8]>, data: &[u8]) -> Result {
+        let identifier_bytes = path.as_ref().into();
+        let mut header = ar::Header::new(identifier_bytes, data.len() as u64);
+        header.set_mode(0o644);
+        // TODO: set modification time
+        header.set_mtime(0);
+        header.set_uid(0);
+        header.set_gid(0);
+
+        self.builder.append(&header, data)?;
+
+        Ok(())
+    }
+}
+
 pub enum DebPackager {}
 
 impl DebPackager {
+    fn gzip(path: &Path) -> Result<Vec<u8>> {
+        let uncompressed_bytes = {
+            let mut buf = Vec::with_capacity(2048);
+            File::open(path)?.read_to_end(&mut buf)?;
+            
+            buf
+        };
+
+        let compressed_bytes = {
+            let mut encoder = flate2::write::GzEncoder::new(Vec::with_capacity(2048), Compression::default());
+
+            encoder.write_all(&uncompressed_bytes)?;
+            encoder.finish()?
+        };
+        
+        Ok(compressed_bytes)
+    }
+
+    /// Return the .tar.gz  bytes of the file on the given path
+    fn tar_gzip(path: &Path) -> Result<Vec<u8>> {
+        let tar_file = tempfile::NamedTempFile::new()?;
+
+        let mut builder = tar::Builder::new(tar_file.as_file());
+        {
+            let mut control_file = File::open(path)?;
+            builder.append_file("control", control_file.file_mut())?;
+            builder.finish()?;
+        }
+        
+        Self::gzip(tar_file.path())
+    }
+
     fn write_dependencies(file: &mut File, dependencies: &Dependencies) -> Result {
         let suppliers = dependencies.suppliers.values();
         if suppliers.len() == 0 {
@@ -38,11 +102,10 @@ impl DebPackager {
     /// Writes the .deb control file
     ///
     /// Docs.:
-    fn write_control_file<W: Write>(
+    fn write_control_file(
         extension: &Extension,
         dependencies: &Dependencies,
-        builder: &mut tar::Builder<W>,
-    ) -> Result<()> {
+    ) -> Result<Vec<u8>> {
         let file_name = format!("{}-{}.control", extension.name, extension.latest_version);
         let control_path = TEMP_DIR.path().join(&file_name);
         let mut file = File::create(&control_path)?;
@@ -63,10 +126,7 @@ impl DebPackager {
         Self::write_dependencies(&mut file, dependencies)?;
         file.flush()?;
 
-        dbg!(Path::new(&file_name).exists());
-        builder.append_path(&file_name)?;
-
-        Ok(())
+        Self::tar_gzip(Path::new(&file_name))
     }
 
     pub async fn build_deb(
@@ -88,23 +148,26 @@ impl DebPackager {
         );
 
         let archive_path = EXPORT_DIR.join(format!("{}.deb", extension.name));
-        let output_archive = { std::fs::File::create(&archive_path)? };
-
-        let mut builder = tar::Builder::new(output_archive);
+        let mut deb_archive = DebPackage::new(&archive_path)?;
 
         // Save the `control` file to our temp directory
-        DebPackager::write_control_file(&extension, &dependencies, &mut builder)?;
-        // Go through each file in the archive and save it to the `deb` folder
-        DebPackager::write_packaged_files(&archive_file, &mut builder).await?;
+        let tar_gzipped = DebPackager::write_control_file(&extension, &dependencies)?;
+        deb_archive.add_file("control.tar.gz", &tar_gzipped)?;
 
-        builder.finish()?;
+        // Go through each file in the archive and save it to the `deb` folder
+        let tar_gzipped = DebPackager::write_packaged_files(&archive_file).await?;
+        deb_archive.add_file("data.tar.gz", &tar_gzipped)?;
+
         Ok(archive_path)
     }
 
-    async fn write_packaged_files<W: Write>(
+    async fn write_packaged_files(
         archive_file: &Path,
-        builder: &mut tar::Builder<W>,
-    ) -> Result {
+    ) -> Result<Vec<u8>> {
+        // Will be `data.tar.gz`
+        let tar_file = tempfile::NamedTempFile::new()?;
+        let mut builder = tar::Builder::new(tar_file.as_file());
+
         let save_to = TEMP_DIR.path();
         let stdout = Unarchiver::extract_all(archive_file, save_to).await?;
 
@@ -139,6 +202,6 @@ impl DebPackager {
             }
         }
 
-        Ok(())
+        Self::gzip(tar_file.path())
     }
 }
