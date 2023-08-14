@@ -11,7 +11,10 @@ use memmap::MmapOptions;
 use owo_colors::OwoColorize;
 use phf::{phf_map, phf_set, Map};
 
-use crate::client::{Client, Extension};
+use crate::{
+    client::{Client, Extension},
+    TEMP_DIR,
+};
 use crate::{unarchiver::Unarchiver, Result};
 
 /// Shared libraries supplied by libc
@@ -116,7 +119,7 @@ impl Dependencies {
     /// Fetch an extension's dependencies by analyzing its compiled archive
     pub async fn fetch_from_archive(extension: Extension, client: Client) -> Result<FetchData> {
         let mut dependencies = Self::new();
-        let temp_dir = client.temp_dir();
+        let temp_dir = TEMP_DIR.path();
 
         // Get the archive for this extension
         let archive_file = client.fetch_extension_archive(&extension.name).await?;

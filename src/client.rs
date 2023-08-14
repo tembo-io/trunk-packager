@@ -1,20 +1,13 @@
-use crate::Result;
+use crate::{Result, TEMP_DIR};
 
-use std::{
-    fs::File,
-    io,
-    path::{Path, PathBuf},
-    sync::Arc,
-};
+use std::{fs::File, io, path::PathBuf, sync::Arc};
 
 use serde::Deserialize;
-use tempfile::TempDir;
 
 #[derive(Clone)]
 pub struct Client {
     client: reqwest::Client,
-    base_url: String,
-    dir: Arc<TempDir>,
+    base_url: Arc<str>,
 }
 
 #[derive(Deserialize)]
@@ -28,16 +21,10 @@ pub struct Extension {
 
 impl Client {
     pub fn new(base_url: String) -> Self {
-        let dir = tempfile::tempdir().expect("Failed to build temporary directory");
         Self {
             client: reqwest::Client::new(),
-            base_url,
-            dir: Arc::new(dir),
+            base_url: base_url.into(),
         }
-    }
-
-    pub fn temp_dir(&self) -> &Path {
-        self.dir.path()
     }
 
     /// Get the name of all currently available extensions
@@ -63,7 +50,7 @@ impl Client {
             .and_then(|name| if name.is_empty() { None } else { Some(name) })
             .expect("URL must end with a file name");
 
-        let destination = self.dir.path().join(file_name);
+        let destination = TEMP_DIR.path().join(file_name);
         let mut file = File::create(&destination)?;
 
         let content = response.bytes().await?;

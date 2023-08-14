@@ -22,8 +22,6 @@ use crate::dependencies::Dependencies;
 
 pub type Result<T = ()> = anyhow::Result<T>;
 
-// pub static BASE_URL: Lazy<String> = Lazy::new(|| std::env::var("BASE_URL").unwrap());
-// pub static EXPORT_DIR: Lazy<PathBuf> = Lazy::new(|| std::env::var_os("EXPORT_DIR").unwrap().into());
 pub static TEMP_DIR: Lazy<TempDir> = Lazy::new(|| tempfile::tempdir().unwrap());
 
 pub fn split_newlines(text: &str) -> impl Iterator<Item = &'_ Path> {
