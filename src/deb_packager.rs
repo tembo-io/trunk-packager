@@ -41,18 +41,22 @@ impl DebPackage {
 pub enum DebPackager {}
 
 impl DebPackager {
-    fn gzip(path: &Path) -> Result<Vec<u8>> {
-        let uncompressed_bytes = utils::read_to_vec(path)?;
-
+    fn gzip_bytes(bytes: &[u8]) -> Result<Vec<u8>> {
         let compressed_bytes = {
             let mut encoder =
                 flate2::write::GzEncoder::new(Vec::with_capacity(2048), Compression::default());
 
-            encoder.write_all(&uncompressed_bytes)?;
+            encoder.write_all(bytes)?;
             encoder.finish()?
         };
 
         Ok(compressed_bytes)
+    }
+    
+    fn gzip_path(path: &Path) -> Result<Vec<u8>> {
+        let uncompressed_bytes = utils::read_to_vec(path)?;
+
+        Self::gzip_bytes(&uncompressed_bytes)
     }
 
     /// Return the .tar.gz  bytes of the file on the given path
@@ -66,7 +70,7 @@ impl DebPackager {
             builder.finish()?;
         }
 
-        Self::gzip(tar_file.path())
+        Self::gzip_path(tar_file.path())
     }
 
     fn write_dependencies(file: &mut File, dependencies: &Dependencies) -> Result {
@@ -152,9 +156,8 @@ impl DebPackager {
     }
 
     async fn write_packaged_files(archive_file: &Path) -> Result<Vec<u8>> {
-        // Will be `data.tar.gz`
-        let tar_file = tempfile::NamedTempFile::new()?;
-        let mut builder = tar::Builder::new(tar_file.as_file());
+        let buf = Vec::new();
+        let mut builder = tar::Builder::new(buf);
 
         let save_to = TEMP_DIR.path();
         let stdout = Unarchiver::extract_all(archive_file, save_to).await?;
@@ -190,6 +193,8 @@ impl DebPackager {
             }
         }
 
-        Self::gzip(tar_file.path())
+        builder.finish()?;
+        let bytes = builder.into_inner()?;
+        Self::gzip_bytes(&bytes)
     }
 }
