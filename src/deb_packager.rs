@@ -117,7 +117,6 @@ impl DebPackager {
             extension.name
         )?;
 
-        // TODO: write down "basic" dependencies such as libc
         // Write down the dependencies
         Self::write_dependencies(&mut file, dependencies)?;
         file.flush()?;

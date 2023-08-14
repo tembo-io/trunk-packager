@@ -14,14 +14,16 @@ use phf::{phf_map, phf_set, Map};
 use crate::client::{Client, Extension};
 use crate::{unarchiver::Unarchiver, Result};
 
+/// Shared libraries supplied by libc
 static BASIC_SHARED_LIBS: phf::Set<&'static str> = phf_set! {
-    "libc.so.6",
-    "libstdc++.so.6",
     "libm.so.6",
+    "ld-linux.so.2",
     "ld-linux-x86-64.so.2"
 };
 
 static DEPENDENCY_SUPPLIERS: Map<&'static str, &'static str> = phf_map! {
+    "libc.so.6" => "libc6",
+    "libstdc++.so.6" => "libstdc++6",
     "libR.so" => "r-base-core",
     "libcrypto.so.3" => "openssl",
     "liblz4.so.1" => "liblz4-1",
@@ -161,13 +163,13 @@ impl Dependencies {
         }
     }
 
-    pub fn add(&mut self, shared_object: &str) {
+    pub fn add(&mut self, mut shared_object: &str) {
         if self.shared_libraries.contains(shared_object) {
             // Dependency was already inserted, no more work to do
             return;
         }
         if BASIC_SHARED_LIBS.contains(shared_object) {
-            return;
+            shared_object = "libc.so.6";
         }
 
         let supplier = DEPENDENCY_SUPPLIERS
