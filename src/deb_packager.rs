@@ -117,7 +117,6 @@ impl DebPackager {
             match maybe_extension {
                 Some(b"control") | Some(b"sql") => {
                     let target = format!("usr/share/postgresql/15/{}", path.display());
-                    eprintln!("Target is {target}");
 
                     builder.append_file(target, file.file_mut())?;
                 }
@@ -127,13 +126,10 @@ impl DebPackager {
                 Some(b"so") => {
                     let target = format!("usr/share/postgresql/15/lib/{}", path.display());
 
-                    eprintln!("Target is {}", target);
                     builder.append_file(target, file.file_mut())?;
                 }
                 Some(b"bc") => {
                     let target = format!("usr/lib/postgresql/15/lib/{}", path.display());
-
-                    eprintln!("Target is {target}");
 
                     builder.append_file(target, file.file_mut())?;
                 }

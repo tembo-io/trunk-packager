@@ -867,26 +867,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "shared-lib-finder"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "dashmap",
- "fs-err",
- "goblin",
- "memmap",
- "once_cell",
- "owo-colors",
- "phf",
- "reqwest",
- "serde",
- "tar",
- "tempfile",
- "tokio",
- "tokio-stream",
-]
-
-[[package]]
 name = "signal-hook-registry"
 version = "1.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1074,6 +1054,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0955b8137a1df6f1a2e9a37d8a6656291ff0297c1a97c24e0d8425fe2312f79a"
 dependencies = [
  "once_cell",
+]
+
+[[package]]
+name = "trunk-packager"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "dashmap",
+ "fs-err",
+ "goblin",
+ "memmap",
+ "once_cell",
+ "owo-colors",
+ "phf",
+ "reqwest",
+ "serde",
+ "tar",
+ "tempfile",
+ "tokio",
+ "tokio-stream",
 ]
 
 [[package]]

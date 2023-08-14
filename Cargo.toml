@@ -1,5 +1,5 @@
 [package]
-name = "shared-lib-finder"
+name = "trunk-packager"
 version = "0.1.0"
 edition = "2021"
 
