@@ -2,6 +2,7 @@ mod client;
 mod deb_packager;
 mod dependencies;
 mod unarchiver;
+mod utils;
 
 use std::ops::Not;
 use std::path::{Path, PathBuf};

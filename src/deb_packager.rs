@@ -1,5 +1,4 @@
 use std::ffi::OsStr;
-use std::io::Read;
 use std::os::unix::prelude::OsStrExt;
 use std::path::Path;
 use std::{io::Write, path::PathBuf};
@@ -10,7 +9,7 @@ use fs_err::File;
 use crate::dependencies::{DependencySupplier, FetchData};
 use crate::unarchiver::Unarchiver;
 use crate::{client::Extension, dependencies::Dependencies, EXPORT_DIR};
-use crate::{split_newlines, Result, TEMP_DIR};
+use crate::{split_newlines, utils, Result, TEMP_DIR};
 
 pub struct DebPackage {
     builder: ar::Builder<File>,
@@ -43,12 +42,7 @@ pub enum DebPackager {}
 
 impl DebPackager {
     fn gzip(path: &Path) -> Result<Vec<u8>> {
-        let uncompressed_bytes = {
-            let mut buf = Vec::with_capacity(2048);
-            File::open(path)?.read_to_end(&mut buf)?;
-
-            buf
-        };
+        let uncompressed_bytes = utils::read_to_vec(path)?;
 
         let compressed_bytes = {
             let mut encoder =

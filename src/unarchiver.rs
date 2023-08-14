@@ -1,9 +1,8 @@
 use std::{path::Path, process::Stdio};
 
-use anyhow::Context;
 use tokio::process::Command;
 
-use crate::Result;
+use crate::{utils::path_to_str, Result};
 
 pub struct Unarchiver;
 
@@ -27,13 +26,8 @@ impl Unarchiver {
     }
 
     pub async fn extract_shared_objs(path: &Path, save_to: &Path) -> Result<String> {
-        let file_name = path
-            .to_str()
-            // TODO: we don't strictly need to be UTF-8 here
-            .with_context(|| "Expected file name to be valid UTF-8")?;
-        let export_to = save_to
-            .to_str()
-            .with_context(|| "Expected file name to be valid UTF-8")?;
+        let file_name = path_to_str(path)?;
+        let export_to = path_to_str(save_to)?;
 
         Self::ensure_has_shared_objects(file_name).await?;
 
@@ -61,13 +55,8 @@ impl Unarchiver {
     }
 
     pub async fn extract_all(path: &Path, save_to: &Path) -> Result<String> {
-        let file_name = path
-            .to_str()
-            // TODO: we don't strictly need to be UTF-8 here
-            .with_context(|| "Expected file name to be valid UTF-8")?;
-        let export_to = save_to
-            .to_str()
-            .with_context(|| "Expected file name to be valid UTF-8")?;
+        let file_name = path_to_str(path)?;
+        let export_to = path_to_str(save_to)?;
 
         let arguments = ["-xzvf", file_name, "-C", export_to];
 
