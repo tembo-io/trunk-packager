@@ -1,17 +1,15 @@
 use std::{
     ffi::OsStr,
     io::{Cursor, Read},
-    path::{Path, PathBuf},
-    process::Stdio,
+    path::PathBuf,
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use bytes::Bytes;
 use flate2::read::GzDecoder;
 use tar::EntryType;
-use tokio::process::Command;
 
-use crate::{utils::path_to_str, Result};
+use crate::Result;
 
 pub struct Unarchiver;
 
@@ -55,7 +53,7 @@ impl Entry {
         header.set_gid(0);
         header.set_size(self.contents.len() as u64);
         header.set_entry_type(EntryType::Regular);
-        
+
         header.set_cksum();
         header
     }
@@ -76,11 +74,14 @@ impl Unarchiver {
             let entry_size = header.entry_size().unwrap_or(12500);
 
             match header.entry_type() {
-                EntryType::Regular => {},
+                EntryType::Regular => {}
                 other => {
-                    eprintln!("decompressing: Found a {:?} file, expected Regular. Ignoring", other);
+                    eprintln!(
+                        "decompressing: Found a {:?} file, expected Regular. Ignoring",
+                        other
+                    );
                     continue;
-                },
+                }
             }
 
             let path = entry.path()?.into();

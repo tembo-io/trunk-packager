@@ -1,18 +1,89 @@
+use std::collections::HashSet;
 use std::io::Cursor;
-use std::path::Path;
+use std::ops::Not;
+use std::path::{Path, Component};
 use std::sync::Arc;
 use std::{io::Write, path::PathBuf};
 
+use anyhow::Ok;
 use flate2::Compression;
 use fs_err::File;
 
 use crate::dependencies::{DependencySupplier, FetchData};
-use crate::unarchiver::Archive;
+use crate::unarchiver::{Archive, Entry};
 use crate::{client::Extension, dependencies::Dependencies};
 use crate::{utils, Result, TEMP_DIR};
 
 pub struct DebPackage {
     builder: ar::Builder<File>,
+}
+
+pub struct TarArchive {
+    directories_created: HashSet<PathBuf>,
+    builder: tar::Builder<Vec<u8>>,
+}
+
+impl TarArchive {
+    pub fn new() -> Self {
+        let buf = Vec::new();
+        let builder = tar::Builder::new(buf);
+
+        Self { builder, directories_created: HashSet::new() }
+    }
+
+    fn add_directory(&mut self, path: &Path) -> Result<()> {
+        let mut header = tar::Header::new_gnu();
+        header.set_entry_type(tar::EntryType::Directory);
+        header.set_size(0);
+        header.set_mode(0o755);
+        header.set_gid(0);
+        header.set_uid(0);
+        header.set_cksum();
+
+        self.builder.append_data(&mut header, path, &mut std::io::empty())?;
+
+        Ok(())
+    }
+
+    fn populate_ancestor_paths(&mut self, path: &Path) -> Result<()> {
+        let mut directory = PathBuf::with_capacity(20);
+        directory.push("./");
+
+        for comp in path.components() {
+            match comp {
+                Component::CurDir => {},
+                Component::Normal(c) => directory.push(c),
+                _ => continue,
+            }
+
+            if self.directories_created.contains(&directory).not() {
+                self.add_directory(&directory)?;
+
+                self.directories_created.insert(directory.clone());
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn add_entry<P: AsRef<Path>>(&mut self, entry: &Entry, path: &P) -> Result<()> {
+        let path = path.as_ref();
+        let parent = path.parent().unwrap();
+        self.populate_ancestor_paths(parent)?;
+
+        let mut header = entry.tar_header();
+        let contents = Cursor::new(&entry.contents);
+
+        self.builder.append_data(&mut header, path, contents)?;
+
+        Ok(())
+    }
+
+    pub fn into_bytes(mut self) -> Result<Vec<u8>> {
+        self.builder.finish()?;
+
+        Ok(self.builder.into_inner()?)
+    }
 }
 
 impl DebPackage {
@@ -157,32 +228,29 @@ impl DebPackager {
     }
 
     async fn write_packaged_files(archive: &Archive) -> Result<Vec<u8>> {
-        let buf = Vec::new();
-        let mut builder = tar::Builder::new(buf);
+        let mut data_tar = TarArchive::new();
 
         for entry in archive.all_entries() {
             let maybe_extension = entry.extension();
-            let mut header = entry.tar_header();
-            let content_reader = Cursor::new(&entry.contents);
 
             match maybe_extension {
                 Some(b"control") | Some(b"sql") => {
-                    let target = format!("usr/share/postgresql/15/{}", entry.path.display());
+                    let target = format!(".//usr/share/postgresql/15/{}", entry.path.display());
 
-                    builder.append_data(&mut header, target, content_reader)?;
+                    data_tar.add_entry(entry, &target)?;
                 }
                 Some(b"json") => {
                     // TODO: I don't know if these should go somewhere
                 }
                 Some(b"so") => {
-                    let target = format!("usr/share/postgresql/15/lib/{}", entry.path.display());
+                    let target = format!(".//usr/share/postgresql/15/lib/{}", entry.path.display());
 
-                    builder.append_data(&mut header, target, content_reader)?;
+                    data_tar.add_entry(entry, &target)?;
                 }
                 Some(b"bc") => {
-                    let target = format!("usr/lib/postgresql/15/lib/{}", entry.path.display());
+                    let target = format!(".//usr/lib/postgresql/15/lib/{}", entry.path.display());
 
-                    builder.append_data(&mut header, target, content_reader)?;
+                    data_tar.add_entry(entry, &target)?;
                 }
                 Some(_) | None => {
                     // If the file had no extension, or another one, then it's likely a license file
@@ -190,8 +258,7 @@ impl DebPackager {
             }
         }
 
-        builder.finish()?;
-        let bytes = builder.into_inner()?;
+        let bytes = data_tar.into_bytes()?;
         Self::gzip_bytes(&bytes)
     }
 }
