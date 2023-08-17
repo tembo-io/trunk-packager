@@ -1,5 +1,4 @@
-use std::ffi::OsStr;
-use std::os::unix::prelude::OsStrExt;
+use std::io::Cursor;
 use std::path::Path;
 use std::sync::Arc;
 use std::{io::Write, path::PathBuf};
@@ -8,9 +7,9 @@ use flate2::Compression;
 use fs_err::File;
 
 use crate::dependencies::{DependencySupplier, FetchData};
-use crate::unarchiver::Unarchiver;
+use crate::unarchiver::Archive;
 use crate::{client::Extension, dependencies::Dependencies};
-use crate::{split_newlines, utils, Result, TEMP_DIR};
+use crate::{utils, Result, TEMP_DIR};
 
 pub struct DebPackage {
     builder: ar::Builder<File>,
@@ -127,7 +126,7 @@ impl DebPackager {
         FetchData {
             extension,
             dependencies,
-            archive_file,
+            archive,
         }: FetchData,
         export_dir: Arc<Path>,
     ) -> Result<PathBuf> {
@@ -151,43 +150,39 @@ impl DebPackager {
         deb_archive.add_file("control.tar.gz", &tar_gzipped)?;
 
         // Go through each file in the archive and save it to the `deb` folder
-        let tar_gzipped = DebPackager::write_packaged_files(&archive_file).await?;
+        let tar_gzipped = DebPackager::write_packaged_files(&archive).await?;
         deb_archive.add_file("data.tar.gz", &tar_gzipped)?;
 
         Ok(archive_path)
     }
 
-    async fn write_packaged_files(archive_file: &Path) -> Result<Vec<u8>> {
+    async fn write_packaged_files(archive: &Archive) -> Result<Vec<u8>> {
         let buf = Vec::new();
         let mut builder = tar::Builder::new(buf);
 
-        let save_to = TEMP_DIR.path();
-        let stdout = Unarchiver::extract_all(archive_file, save_to).await?;
-
-        let files_extracted = split_newlines(&stdout);
-
-        for path in files_extracted {
-            let maybe_extension = path.extension().map(OsStr::as_bytes);
-            let mut file = File::open(path)?;
+        for entry in archive.all_entries() {
+            let maybe_extension = entry.extension();
+            let mut header = entry.tar_header();
+            let content_reader = Cursor::new(&entry.contents);
 
             match maybe_extension {
                 Some(b"control") | Some(b"sql") => {
-                    let target = format!("usr/share/postgresql/15/{}", path.display());
+                    let target = format!("usr/share/postgresql/15/{}", entry.path.display());
 
-                    builder.append_file(target, file.file_mut())?;
+                    builder.append_data(&mut header, target, content_reader)?;
                 }
                 Some(b"json") => {
                     // TODO: I don't know if these should go somewhere
                 }
                 Some(b"so") => {
-                    let target = format!("usr/share/postgresql/15/lib/{}", path.display());
+                    let target = format!("usr/share/postgresql/15/lib/{}", entry.path.display());
 
-                    builder.append_file(target, file.file_mut())?;
+                    builder.append_data(&mut header, target, content_reader)?;
                 }
                 Some(b"bc") => {
-                    let target = format!("usr/lib/postgresql/15/lib/{}", path.display());
+                    let target = format!("usr/lib/postgresql/15/lib/{}", entry.path.display());
 
-                    builder.append_file(target, file.file_mut())?;
+                    builder.append_data(&mut header, target, content_reader)?;
                 }
                 Some(_) | None => {
                     // If the file had no extension, or another one, then it's likely a license file

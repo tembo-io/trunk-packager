@@ -1,6 +1,6 @@
-use crate::{Result, TEMP_DIR};
+use crate::Result;
 
-use std::{fs::File, io, path::PathBuf, sync::Arc};
+use std::sync::Arc;
 
 use bytes::Bytes;
 use serde::Deserialize;
@@ -41,26 +41,15 @@ impl Client {
             .map_err(Into::into)
     }
 
-    pub async fn download_file(&self, url: &str) -> Result<(Bytes, PathBuf)> {
+    pub async fn download_file(&self, url: &str) -> Result<Bytes> {
         let response = self.client.get(url).send().await?;
 
-        let file_name = response
-            .url()
-            .path_segments()
-            .and_then(|segments| segments.last())
-            .and_then(|name| if name.is_empty() { None } else { Some(name) })
-            .expect("URL must end with a file name");
-
-        let destination = TEMP_DIR.path().join(file_name);
-        let mut file = File::create(&destination)?;
-
         let content = response.bytes().await?;
-        io::copy(&mut content.as_ref(), &mut file)?;
 
-        Ok((content, destination))
+        Ok(content)
     }
 
-    pub async fn fetch_extension_archive(&self, extension: &str) -> Result<(Bytes, PathBuf)> {
+    pub async fn fetch_extension_archive(&self, extension: &str) -> Result<Bytes> {
         let archive_url = {
             let url = format!("{}/extensions/{}/latest/download", self.base_url, extension);
 

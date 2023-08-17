@@ -1,15 +1,16 @@
 use std::{
     collections::{HashMap, HashSet},
     fmt::Display,
-    path::PathBuf,
     sync::Arc,
 };
 
 use owo_colors::OwoColorize;
 use phf::{phf_map, phf_set, Map};
 
-use crate::
-    client::{Client, Extension};
+use crate::{
+    client::{Client, Extension},
+    unarchiver::Archive,
+};
 use crate::{unarchiver::Unarchiver, Result};
 
 /// Shared libraries supplied by libc
@@ -106,17 +107,17 @@ pub struct FetchData {
     pub extension: Extension,
     /// The system dependencies of this file
     pub dependencies: Dependencies,
-    /// The location of the .tar.gz archive downloaded from Trunk
-    pub archive_file: PathBuf,
+    /// The decompressed contents of the .tar.gz archive downloaded from Trunk
+    pub archive: Archive,
 }
 
 impl Dependencies {
     /// Fetch an extension's dependencies by analyzing its compiled archive
     pub async fn fetch_from_archive(extension: Extension, client: Client) -> Result<FetchData> {
         let mut dependencies = Self::new();
-        
+
         // Get the archive for this extension
-        let (tar_gz, archive_file) = client.fetch_extension_archive(&extension.name).await?;
+        let tar_gz = client.fetch_extension_archive(&extension.name).await?;
         let archive = Unarchiver::decompress_in_memory(tar_gz).await?;
 
         for entry in archive.shared_objects() {
@@ -140,7 +141,7 @@ impl Dependencies {
         Ok(FetchData {
             extension,
             dependencies,
-            archive_file,
+            archive,
         })
     }
 
