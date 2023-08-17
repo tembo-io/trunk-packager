@@ -2,6 +2,7 @@ use crate::{Result, TEMP_DIR};
 
 use std::{fs::File, io, path::PathBuf, sync::Arc};
 
+use bytes::Bytes;
 use serde::Deserialize;
 
 #[derive(Clone)]
@@ -40,7 +41,7 @@ impl Client {
             .map_err(Into::into)
     }
 
-    pub async fn download_file(&self, url: &str) -> Result<PathBuf> {
+    pub async fn download_file(&self, url: &str) -> Result<(Bytes, PathBuf)> {
         let response = self.client.get(url).send().await?;
 
         let file_name = response
@@ -56,12 +57,12 @@ impl Client {
         let content = response.bytes().await?;
         io::copy(&mut content.as_ref(), &mut file)?;
 
-        Ok(destination)
+        Ok((content, destination))
     }
 
-    pub async fn fetch_extension_archive(&self, extension: &str) -> Result<PathBuf> {
+    pub async fn fetch_extension_archive(&self, extension: &str) -> Result<(Bytes, PathBuf)> {
         let archive_url = {
-            let url = format!("{}/extensions/{}/latest/download", self.base_url, extension,);
+            let url = format!("{}/extensions/{}/latest/download", self.base_url, extension);
 
             self.client.get(url).send().await?.text().await?
         };

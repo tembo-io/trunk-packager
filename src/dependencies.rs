@@ -1,20 +1,15 @@
 use std::{
     collections::{HashMap, HashSet},
     fmt::Display,
-    fs::File,
-    ops::Not,
     path::PathBuf,
     sync::Arc,
 };
 
-use memmap::MmapOptions;
 use owo_colors::OwoColorize;
 use phf::{phf_map, phf_set, Map};
 
-use crate::{
-    client::{Client, Extension},
-    TEMP_DIR,
-};
+use crate::
+    client::{Client, Extension};
 use crate::{unarchiver::Unarchiver, Result};
 
 /// Shared libraries supplied by libc
@@ -119,23 +114,13 @@ impl Dependencies {
     /// Fetch an extension's dependencies by analyzing its compiled archive
     pub async fn fetch_from_archive(extension: Extension, client: Client) -> Result<FetchData> {
         let mut dependencies = Self::new();
-        let temp_dir = TEMP_DIR.path();
-
+        
         // Get the archive for this extension
-        let archive_file = client.fetch_extension_archive(&extension.name).await?;
+        let (tar_gz, archive_file) = client.fetch_extension_archive(&extension.name).await?;
+        let archive = Unarchiver::decompress_in_memory(tar_gz).await?;
 
-        // The output from the `tar` binary after it decompressed `.so` files from the archive
-        let decompression_stdout = Unarchiver::extract_shared_objs(&archive_file, temp_dir).await?;
-        let shared_objects = decompression_stdout
-            .split('\n')
-            .filter(|file| file.is_empty().not());
-
-        for object in shared_objects {
-            let object = temp_dir.join(object);
-            let file = File::open(object)?;
-            let map = unsafe { MmapOptions::new().map(&file) }?;
-
-            let obj = goblin::Object::parse(&map)?;
+        for entry in archive.shared_objects() {
+            let obj = goblin::Object::parse(&entry.contents)?;
             let shared_libraries = match obj {
                 goblin::Object::Elf(elf) => elf.libraries,
                 other => {
