@@ -2,7 +2,6 @@ use std::{
     ffi::OsStr,
     io::{Cursor, Read},
     path::PathBuf,
-    time::{SystemTime, UNIX_EPOCH},
 };
 
 use bytes::Bytes;
@@ -20,10 +19,6 @@ pub struct Archive {
 impl Archive {
     pub fn shared_objects(&self) -> impl Iterator<Item = &Entry> {
         self.entries.iter().filter(|entry| entry.is_shared_object())
-    }
-
-    pub fn all_entries(&self) -> &[Entry] {
-        &self.entries
     }
 }
 
@@ -43,20 +38,6 @@ impl Entry {
         self.path.extension().map(OsStr::as_bytes)
     }
 
-    pub fn tar_header(&self) -> tar::Header {
-        let mut header = tar::Header::new_gnu();
-        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
-
-        header.set_mode(0o644);
-        header.set_mtime(now.as_secs());
-        header.set_uid(0);
-        header.set_gid(0);
-        header.set_size(self.contents.len() as u64);
-        header.set_entry_type(EntryType::Regular);
-
-        header.set_cksum();
-        header
-    }
 }
 
 impl Unarchiver {

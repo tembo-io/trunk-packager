@@ -20,6 +20,7 @@ owo-colors = "3.5.0"
 phf = { version = "0.11.2", features = ["macros"] }
 reqwest = { version = "0.11.18", features = ["json"] }
 serde = { version = "1.0.183", features = ["derive"] }
+slicedisplay = "0.2.2"
 tar = { path = "./tar-rs" }
 tempfile = "3.7.1"
 tokio = { version ="1.30.0", features = ["macros", "rt-multi-thread", "process"] }

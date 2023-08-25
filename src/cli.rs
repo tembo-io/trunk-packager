@@ -46,9 +46,3 @@ pub struct PackageOne {
     /// the base URL of the Trunk provider
     base_url: String,
 }
-
-pub fn parse_args() -> Subcommands {
-    let args: Args = argh::from_env();
-
-    args.nested
-}

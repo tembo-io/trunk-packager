@@ -64,19 +64,6 @@ pub enum DependencySupplier {
     Unknown,
 }
 
-impl DependencySupplier {
-    pub fn is_met(&self) -> bool {
-        matches!(self, Self::MetBy { package: _ })
-    }
-
-    pub fn name(&self) -> &str {
-        match self {
-            DependencySupplier::MetBy { package } => package,
-            DependencySupplier::Unknown => "<unknown>",
-        }
-    }
-}
-
 impl Display for DependencySupplier {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -103,8 +90,6 @@ impl Display for Dependencies {
 }
 
 pub struct FetchData {
-    /// Actual extension data
-    pub extension: Extension,
     /// The system dependencies of this file
     pub dependencies: Dependencies,
     /// The decompressed contents of the .tar.gz archive downloaded from Trunk
@@ -113,7 +98,7 @@ pub struct FetchData {
 
 impl Dependencies {
     /// Fetch an extension's dependencies by analyzing its compiled archive
-    pub async fn fetch_from_archive(extension: Extension, client: Client) -> Result<FetchData> {
+    pub async fn fetch_from_archive(extension: &Extension, client: &Client) -> Result<FetchData> {
         let mut dependencies = Self::new();
 
         // Get the archive for this extension
@@ -139,7 +124,6 @@ impl Dependencies {
         }
 
         Ok(FetchData {
-            extension,
             dependencies,
             archive,
         })
