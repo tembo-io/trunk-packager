@@ -2,6 +2,7 @@ use crate::Result;
 
 use std::sync::Arc;
 
+use anyhow::bail;
 use bytes::Bytes;
 use serde::Deserialize;
 
@@ -15,9 +16,9 @@ pub struct Client {
 #[serde(rename_all = "camelCase")]
 pub struct Extension {
     pub name: String,
-    pub license: String,
+    pub license: Option<String>,
     pub latest_version: String,
-    pub description: String,
+    pub description: Option<String>,
 }
 
 impl Client {
@@ -32,13 +33,19 @@ impl Client {
     pub async fn fetch_extensions(&self) -> Result<Vec<Extension>> {
         let url = format!("{}/extensions/all", self.base_url);
 
-        self.client
-            .get(url)
-            .send()
-            .await?
-            .json()
-            .await
-            .map_err(Into::into)
+        println!("Will hit {url}");
+
+        let response = self.client.get(url).send().await?;
+
+        let status = response.status();
+
+        if status.is_success() {
+            response.json().await.map_err(Into::into)
+        } else {
+            let body = response.text().await?;
+            let err = format!("API returned {}: {}", status.as_u16(), body);
+            bail!(err)
+        }
     }
 
     pub async fn download_file(&self, url: &str) -> Result<Bytes> {

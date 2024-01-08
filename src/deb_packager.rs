@@ -1,8 +1,7 @@
 use std::collections::HashSet;
 use std::io::Cursor;
 use std::ops::Not;
-use std::path::{Path, Component};
-use std::sync::Arc;
+use std::path::{Component, Path};
 use std::{io::Write, path::PathBuf};
 
 use anyhow::Ok;
@@ -28,7 +27,10 @@ impl TarArchive {
         let buf = Vec::new();
         let builder = tar::Builder::new(buf);
 
-        Self { builder, directories_created: HashSet::new() }
+        Self {
+            builder,
+            directories_created: HashSet::new(),
+        }
     }
 
     fn add_directory(&mut self, path: &Path) -> Result<()> {
@@ -40,7 +42,8 @@ impl TarArchive {
         header.set_uid(0);
         header.set_cksum();
 
-        self.builder.append_data(&mut header, path, &mut std::io::empty())?;
+        self.builder
+            .append_data(&mut header, path, &mut std::io::empty())?;
 
         Ok(())
     }
@@ -51,7 +54,7 @@ impl TarArchive {
 
         for comp in path.components() {
             match comp {
-                Component::CurDir => {},
+                Component::CurDir => {}
                 Component::Normal(c) => directory.push(c),
                 _ => continue,
             }
@@ -172,14 +175,18 @@ impl DebPackager {
     fn write_control_file(extension: &Extension, dependencies: &Dependencies) -> Result<Vec<u8>> {
         let file_name = format!("{}-{}.control", extension.name, extension.latest_version);
         let control_path = TEMP_DIR.path().join(&file_name);
-        let mut file = File::create(&control_path)?;
+        let mut file = File::create(control_path)?;
 
         // TODO: save as something else? perhaps "postgres15-{extension-name}-trunk"
         writeln!(file, "Package: {}", extension.name)?;
         writeln!(file, "Section: database")?;
         writeln!(file, "Architecture: amd64")?;
         writeln!(file, "Version: {}", extension.latest_version)?;
-        writeln!(file, "Description: {}", extension.description)?;
+        writeln!(
+            file,
+            "Description: {}",
+            extension.description.as_deref().unwrap_or("")
+        )?;
         writeln!(
             file,
             "Homepage: https://pgt.dev/extensions/{}",
@@ -193,13 +200,13 @@ impl DebPackager {
         Self::tar_gzip(Path::new(&file_name))
     }
 
-    pub async fn build_deb(
+    pub async fn build_deb<P: AsRef<Path>>(
         FetchData {
             extension,
             dependencies,
             archive,
         }: FetchData,
-        export_dir: Arc<Path>,
+        export_dir: P,
     ) -> Result<PathBuf> {
         // Check if this .deb is actually writable (e.g. if we know all dependencies it requires)
         let all_dependencies_are_known = dependencies
@@ -212,7 +219,7 @@ impl DebPackager {
             extension.name
         );
 
-        let archive_path = export_dir.join(format!("{}.deb", extension.name));
+        let archive_path = export_dir.as_ref().join(format!("{}.deb", extension.name));
         let mut deb_archive = DebPackage::new(&archive_path)?;
         deb_archive.add_file("debian-binary", b"2.0\n")?;
 

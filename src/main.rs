@@ -9,8 +9,8 @@ use std::ops::Not;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
-use anyhow::Ok;
-use cli::PackageAll;
+use anyhow::{Context, Ok};
+use cli::{PackageAll, PackageOne};
 use once_cell::sync::Lazy;
 use owo_colors::OwoColorize;
 use tempfile::TempDir;
@@ -28,6 +28,36 @@ pub fn split_newlines(text: &str) -> impl Iterator<Item = &'_ Path> {
     text.split('\n')
         .filter(|line| line.is_empty().not())
         .map(Path::new)
+}
+
+async fn package_extension(
+    base_url: String,
+    trunk_project_name: String,
+    export_dir: PathBuf,
+) -> Result {
+    let client = Client::new(base_url);
+    std::env::set_current_dir(&*TEMP_DIR)?;
+
+    let extensions = client
+        .fetch_extensions()
+        .await
+        .with_context(|| "Failed to fetch extensions")?;
+
+    let extension = extensions
+        .into_iter()
+        .find(|ext| ext.name == trunk_project_name)
+        .with_context(|| {
+            format!("Failed to find a Trunk project with name {trunk_project_name}")
+        })?;
+
+    let data_fetched = Dependencies::fetch_from_archive(extension, client)
+        .await
+        .with_context(|| "Failed to fetch archive")?;
+
+    let archive_written = DebPackager::build_deb(data_fetched, &export_dir).await?;
+    println!("Wrote archive at {}", archive_written.display());
+
+    Ok(())
 }
 
 async fn package_all_extensions(base_url: String, export_dir: PathBuf) -> Result {
@@ -84,6 +114,13 @@ async fn main() -> Result {
             base_url,
             export_dir,
         }) => package_all_extensions(base_url, export_dir).await,
-        Subcommands::PackageOne(_) => Ok(()),
+        Subcommands::PackageOne(PackageOne {
+            base_url,
+            trunk_project_name,
+            export_dir,
+        }) => {
+            let export_dir = std::fs::canonicalize(export_dir)?;
+            package_extension(base_url, trunk_project_name, export_dir).await
+        }
     }
 }

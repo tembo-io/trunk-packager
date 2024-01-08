@@ -44,7 +44,13 @@ pub struct PackageAll {
 pub struct PackageOne {
     #[argh(option)]
     /// the base URL of the Trunk provider
-    base_url: String,
+    pub base_url: String,
+    #[argh(positional)]
+    /// the Trunk project to be packaged
+    pub trunk_project_name: String,
+    #[argh(option)]
+    /// the directory in which to export the generated package
+    pub export_dir: PathBuf,
 }
 
 pub fn parse_args() -> Subcommands {
