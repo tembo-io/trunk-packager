@@ -250,7 +250,7 @@ impl DebPackager {
                     // TODO: I don't know if these should go somewhere
                 }
                 Some(b"so") => {
-                    let target = format!(".//usr/share/postgresql/15/lib/{}", entry.path.display());
+                    let target = format!(".//usr/lib/postgresql/15/lib/{}", entry.path.display());
 
                     data_tar.add_entry(entry, &target)?;
                 }
@@ -260,7 +260,7 @@ impl DebPackager {
                     data_tar.add_entry(entry, &target)?;
                 }
                 Some(_) | None => {
-                    // If the file had no extension, or another one, then it's likely a license file
+                    // If the file had no extension, or some other, then it's likely a license file
                 }
             }
         }
