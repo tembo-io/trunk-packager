@@ -51,6 +51,9 @@ pub struct PackageOne {
     #[argh(option)]
     /// the directory in which to export the generated package
     pub export_dir: PathBuf,
+    #[argh(option)]
+    /// the path to a Trunk package
+    pub file: Option<PathBuf>,
 }
 
 pub fn parse_args() -> Subcommands {

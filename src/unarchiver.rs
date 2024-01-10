@@ -5,7 +5,6 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use bytes::Bytes;
 use flate2::read::GzDecoder;
 use tar::EntryType;
 
@@ -60,9 +59,9 @@ impl Entry {
 }
 
 impl Unarchiver {
-    pub async fn decompress_in_memory(tar_gz: Bytes) -> Result<Archive> {
+    pub fn decompress_in_memory(tar_gz: &[u8]) -> Result<Archive> {
         let mut buf = Vec::with_capacity(tar_gz.len() * 8);
-        GzDecoder::new(tar_gz.as_ref()).read_to_end(&mut buf)?;
+        GzDecoder::new(tar_gz).read_to_end(&mut buf)?;
 
         let mut archive = tar::Archive::new(Cursor::new(buf));
 

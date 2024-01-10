@@ -242,7 +242,7 @@ impl DebPackager {
 
             match maybe_extension {
                 Some(b"control") | Some(b"sql") => {
-                    let target = format!(".//usr/share/postgresql/15/{}", entry.path.display());
+                    let target = format!(".//usr/share/postgresql/16/{}", entry.path.display());
 
                     data_tar.add_entry(entry, &target)?;
                 }
@@ -250,12 +250,12 @@ impl DebPackager {
                     // TODO: I don't know if these should go somewhere
                 }
                 Some(b"so") => {
-                    let target = format!(".//usr/lib/postgresql/15/lib/{}", entry.path.display());
+                    let target = format!(".//usr/lib/postgresql/16/lib/{}", entry.path.display());
 
                     data_tar.add_entry(entry, &target)?;
                 }
                 Some(b"bc") => {
-                    let target = format!(".//usr/lib/postgresql/15/lib/{}", entry.path.display());
+                    let target = format!(".//usr/lib/postgresql/16/lib/{}", entry.path.display());
 
                     data_tar.add_entry(entry, &target)?;
                 }

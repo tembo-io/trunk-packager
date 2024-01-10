@@ -114,11 +114,16 @@ pub struct FetchData {
 impl Dependencies {
     /// Fetch an extension's dependencies by analyzing its compiled archive
     pub async fn fetch_from_archive(extension: Extension, client: Client) -> Result<FetchData> {
-        let mut dependencies = Self::new();
-
         // Get the archive for this extension
         let tar_gz = client.fetch_extension_archive(&extension.name).await?;
-        let archive = Unarchiver::decompress_in_memory(tar_gz).await?;
+
+        Self::decompress_archive(extension, &tar_gz)
+    }
+
+    pub fn decompress_archive(extension: Extension, tar_gz_bytes: &[u8]) -> Result<FetchData> {
+        let mut dependencies = Self::new();
+
+        let archive = Unarchiver::decompress_in_memory(tar_gz_bytes)?;
 
         for entry in archive.shared_objects() {
             let obj = goblin::Object::parse(&entry.contents)?;

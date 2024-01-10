@@ -11,6 +11,8 @@ use std::sync::Arc;
 
 use anyhow::{Context, Ok};
 use cli::{PackageAll, PackageOne};
+use client::Extension;
+use dependencies::FetchData;
 use once_cell::sync::Lazy;
 use owo_colors::OwoColorize;
 use tempfile::TempDir;
@@ -34,9 +36,39 @@ async fn package_extension(
     base_url: String,
     trunk_project_name: String,
     export_dir: PathBuf,
+    maybe_file: Option<PathBuf>,
 ) -> Result {
-    let client = Client::new(base_url);
     std::env::set_current_dir(&*TEMP_DIR)?;
+
+    let data_fetched = if let Some(file) = maybe_file {
+        fetch_from_local_file(base_url, &file, &trunk_project_name).await?
+    } else {
+        fetch_archive_from_registry(base_url, &trunk_project_name).await?
+    };
+
+    let archive_written = DebPackager::build_deb(data_fetched, &export_dir).await?;
+    println!("Wrote archive at {}", archive_written.display());
+
+    Ok(())
+}
+
+async fn fetch_from_local_file(
+    base_url: String,
+    archive_path: &Path,
+    trunk_project_name: &str,
+) -> Result<FetchData> {
+    let (_client, extension) = fetch_extension(base_url, trunk_project_name).await?;
+
+    let archive = std::fs::read(archive_path).with_context(|| "Failed to read supplied archive")?;
+
+    Dependencies::decompress_archive(extension, &archive)
+}
+
+async fn fetch_extension(
+    base_url: String,
+    trunk_project_name: &str,
+) -> Result<(Client, Extension)> {
+    let client = Client::new(base_url);
 
     let extensions = client
         .fetch_extensions()
@@ -50,14 +82,18 @@ async fn package_extension(
             format!("Failed to find a Trunk project with name {trunk_project_name}")
         })?;
 
-    let data_fetched = Dependencies::fetch_from_archive(extension, client)
+    Ok((client, extension))
+}
+
+async fn fetch_archive_from_registry(
+    base_url: String,
+    trunk_project_name: &str,
+) -> Result<FetchData> {
+    let (client, extension) = fetch_extension(base_url, trunk_project_name).await?;
+
+    Dependencies::fetch_from_archive(extension, client)
         .await
-        .with_context(|| "Failed to fetch archive")?;
-
-    let archive_written = DebPackager::build_deb(data_fetched, &export_dir).await?;
-    println!("Wrote archive at {}", archive_written.display());
-
-    Ok(())
+        .with_context(|| "Failed to fetch archive")
 }
 
 async fn package_all_extensions(base_url: String, export_dir: PathBuf) -> Result {
@@ -118,9 +154,10 @@ async fn main() -> Result {
             base_url,
             trunk_project_name,
             export_dir,
+            file,
         }) => {
             let export_dir = std::fs::canonicalize(export_dir)?;
-            package_extension(base_url, trunk_project_name, export_dir).await
+            package_extension(base_url, trunk_project_name, export_dir, file).await
         }
     }
 }
